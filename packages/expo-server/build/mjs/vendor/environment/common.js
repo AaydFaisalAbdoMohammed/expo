@@ -1,3 +1,4 @@
+import { parseParams } from '../../utils/matchers';
 function initManifestRegExp(manifest) {
     return {
         ...manifest,
@@ -69,7 +70,17 @@ export function createEnvironment(input) {
             const renderer = await getServerRenderer();
             if (renderer) {
                 try {
-                    return await renderer(request);
+                    let renderOptions;
+                    // Execute loader if route has one
+                    if (route.loader) {
+                        const loaderModule = (await input.loadModule(route.loader));
+                        if (loaderModule?.loader) {
+                            const params = parseParams(request, route);
+                            const data = await loaderModule.loader({ params, request });
+                            renderOptions = { loader: { data } };
+                        }
+                    }
+                    return await renderer(request, renderOptions);
                 }
                 catch (error) {
                     console.error('SSR render error:', error);
@@ -101,6 +112,17 @@ export function createEnvironment(input) {
                 return null;
             }
             return mod;
+        },
+        async getLoaderData(request, route) {
+            if (!route.loader) {
+                return null;
+            }
+            const loaderModule = (await input.loadModule(route.loader));
+            if (!loaderModule?.loader) {
+                return null;
+            }
+            const params = parseParams(request, route);
+            return loaderModule.loader({ params, request });
         },
     };
 }

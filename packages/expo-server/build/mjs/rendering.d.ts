@@ -13,4 +13,11 @@ export interface RenderOptions {
         data: unknown;
     };
 }
+/** Module exported from loader bundle (e.g., `_expo/loaders/index.js`) */
+export interface LoaderModule {
+    loader?(args: {
+        params: Record<string, string>;
+        request: Request;
+    }): Promise<unknown> | unknown;
+}
 export type SsrRenderFn = (request: Request, options?: RenderOptions) => Promise<string>;
