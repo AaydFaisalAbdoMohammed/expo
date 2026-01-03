@@ -382,6 +382,43 @@ export class MetroBundlerDevServer extends BundlerDevServer {
     return files;
   }
 
+  /**
+   * Export loader bundles as standalone JS files for SSR data loading.
+   *
+   * Each loader bundle contains only the `loader` export from the route file,
+   * with all other exports (default, named) stripped out by the Babel plugin.
+   * This keeps loader bundles small for efficient server-side execution.
+   */
+  async exportExpoRouterLoadersAsync({
+    platform,
+    entryPoints,
+    files,
+    outputDir,
+    includeSourceMaps,
+  }: {
+    platform: string;
+    entryPoints: { file: string; page: string }[];
+    files: ExportAssetMap;
+    outputDir: string;
+    includeSourceMaps: boolean;
+  }): Promise<void> {
+    for (const entry of entryPoints) {
+      const contents = await this.bundleLoader(entry.file, { platform });
+      const pagePath = entry.page.startsWith('/') ? entry.page.slice(1) : entry.page;
+      const artifactFilename = convertPathToModuleSpecifier(path.join(outputDir, pagePath + '.js'));
+
+      await this.exportServerRouteAsync({
+        contents,
+        artifactFilename,
+        files,
+        includeSourceMaps,
+        descriptor: {
+          loaderId: entry.page,
+        },
+      });
+    }
+  }
+
   async getExpoRouterRoutesManifestAsync({ appDir }: { appDir: string }) {
     // getBuiltTimeServerManifest
     const { exp } = getConfig(this.projectRoot);
@@ -1685,6 +1722,7 @@ export class MetroBundlerDevServer extends BundlerDevServer {
 
       const routeModule = await this.ssrLoadModule<any>(modulePath, {
         environment: 'node',
+        isLoaderBundle: true, // Load only the loader export, allowing SSR bundles to strip loaders
       });
 
       if (routeModule.loader) {
@@ -1706,6 +1744,30 @@ export class MetroBundlerDevServer extends BundlerDevServer {
 
     debug('Loader data:', loaderData, ' for location:', location.pathname);
     return loaderData;
+  }
+
+  /**
+   * Bundle a loader module with Metro and return the string contents.
+   */
+  private async bundleLoader(
+    filePath: string,
+    { platform }: { platform: string }
+  ): Promise<SSRModuleContentsResult> {
+    try {
+      debug('Bundle loader:', filePath);
+      return await this.ssrLoadModuleContents(filePath, {
+        isExporting: this.instanceMetroOptions.isExporting,
+        platform,
+        environment: 'node',
+        isLoaderBundle: true,
+      });
+    } catch (error: any) {
+      debug('Failed to bundle loader:', filePath, ':', error.message);
+      throw new CommandError(
+        'LOADER_BUNDLE',
+        chalk`Failed to bundle loader: {bold ${filePath}}\n\n` + error.message
+      );
+    }
   }
 
   // Ensure the global is available for SSR CSS modules to inject client updates.
