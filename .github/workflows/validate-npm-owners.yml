@@ -1,8 +1,8 @@
 name: Validate owners of packages on npm
 
-on:
-  workflow_dispatch: {}
-  schedule:
+#on:
+#  workflow_dispatch: {}
+ # schedule:
     - cron: '0 8 * * *' # 8:00 AM UTC time every day
 
 jobs:
